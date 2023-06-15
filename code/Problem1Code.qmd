@@ -1,0 +1,91 @@
+---
+title: "Problem 1 code"
+format: html
+editor_options: 
+  chunk_output_type: inline
+---
+```{r loading in packages}
+library(tidyverse)
+library(here)
+library(janitor)
+library(ggeffects)
+library(performance)
+library(naniar) # or equivalent
+library(flextable) # or equivalent
+library(car)
+library(broom)
+library(corrplot)
+library(AICcmodavg)
+library(GGally)
+library(ggplot2)
+```
+
+
+```{r loading in the data}
+#calling in data
+data1<-read.csv(here("data", "sev208_kratseedbank_20120213.txt.")) %>%
+  clean_names()
+#making column names nicer
+names(data1)<- c("mound", "direction", "habitat", "species", "seeds")
+view(data1)
+
+  
+```
+
+```{r looking at the seed count for each location}
+#creating a data frame with the data filtered by the mound location
+filtered_data1<-data1 %>%
+  group_by(mound)
+#looking at the seed data for each mound location
+summarise(filtered_data1, Mean_Seed_Number = mean(seeds),
+    Median_Seed_Number = median(seeds),
+    SD_Seed_Number = sd(seeds))
+
+```
+
+```{r}
+#making a data set of mean seed values for the visualization
+mean_data1 <- aggregate(seeds ~ mound, data = filtered_data1, FUN = mean)
+
+```
+
+
+
+
+
+
+```{r visualizing the seed data at each location}
+#recognizing mound values 
+mean_data1$mound <- factor(mean_data1$mound)
+#making a bar plot of the mean seed counts to visualize differences at each location
+ggplot(mean_data1, aes(x = mound, y = seeds)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Location", y = "Mean Seed Count") +
+  scale_y_continuous(breaks = seq(0, max(mean_data1$seeds), by = 1), limits=c(0, 12))+
+    theme(plot.margin = margin(0, 10, 0, 10, "pt")
+  )
+
+
+```
+
+
+```{r checking assumptions for ANOVA table}
+#making a linear regression of seed counts at mounds
+seed_only_data1<-filtered_data1%>%
+  select(mound, seeds)
+lrdata1<-lm(mound ~ seeds, data=seed_only_data1)
+#plotting assumption checks
+par(mfrow= c(2,2))
+plot(lrdata1)
+#checking assumptions statistically
+check_normality(lrdata1)
+check_heteroscedasticity(lrdata1)
+```
+
+```{r}
+seed_only_data1$mound <- as.factor(seed_only_data1$mound)
+anova_result1 <- aov(seeds ~ mound, data = seed_only_data1)
+summary(anova_result1)
+
+```
+
