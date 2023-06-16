@@ -1,5 +1,246 @@
 ---
-title: "Problem2Code"
+title: "Problem 2 code"
 format: html
+editor_options: 
+  chunk_output_type: inline
 ---
+
+```{r loading in packages}
+library(tidyverse)
+library(here)
+library(janitor)
+library(ggeffects)
+library(performance)
+library(naniar) # or equivalent
+library(flextable) # or equivalent
+library(car)
+library(broom)
+library(corrplot)
+library(AICcmodavg)
+library(GGally)
+library(ggplot2)
+library(cowplot)
+```
+
+
+```{r loading in the data}
+#calling in data
+rawdata2<-read.csv(here("data", "shrubstudy_seed_ctwt.ms.data.csv")) 
+#making column names nicer
+names(rawdata2)<- c("date", "shrub_number", "aspect", "tag_num", "treatment","species","plant_num","distance_from_shrub","total_nr_infl", "nr_infl_coll", "seeds", "wt_seeds_mg", "notes")
+#filtering data set to only include relevant data
+data2 <- rawdata2 %>%
+  select(seeds, treatment, species, total_nr_infl)
+#removing the NA values from the seeds collumn
+data2 <- data2[complete.cases(data2$seeds), ]
+
+view(data2)
+```
+
+```{r}
+#making a dataset with all variables cleaned up
+rawdata2 <-rawdata2[complete.cases(rawdata2), ]
+view(rawdata2)
+```
+
+```{r}
+# Select numerical columns
+fulldata2 <- select_if(rawdata2, is.numeric)
+view(fulldata2)
+
+```
+
+```{r checking for missing variables}
+gg_miss_var(data2)
+```
+
+
+```{r looking at correlation between variables and seed type-- doesn't work for this data}
+#correlation plot
+#To determine the relationships between numerical variables in our dataset, we calculated Pearsons r and visually represented correlation using a correlation plot.
+#Pearson's r calculated for numerical values only
+
+seed_cor2<-fulldata2 %>% 
+  select(shrub_number:wt_seeds_mg) %>% 
+  cor(method="pearson")
+#creating a correlation plot
+corrplot(seed_cor2,
+         #change the shape of what's in the cells
+         method = "ellipse",
+         addCoef.col = "black"
+         )
+```
+```{r creating linear regression for the other data }
+
+null_log3<- lm(log(seeds)~1, data= fulldata2)
+full_log3 <- lm(log(seeds) ~ total_nr_infl+ tag_num+ shrub_number+plant_num+nr_infl_coll+wt_seeds_mg, data = fulldata2)
+```
+
+
+```{r}
+model_pred5 <- ggpredict(full_log3, terms = "tag_num", back.transform = TRUE)
+model_pred6 <- ggpredict(full_log3, terms = "shrub_number", back.transform = TRUE)
+model_pred7 <- ggpredict(full_log3, terms = "plant_num", back.transform = TRUE)
+model_pred8 <- ggpredict(full_log3, terms = "total_nr_infl", back.transform = TRUE)
+model_pred9 <- ggpredict(full_log3, terms = "nr_infl_coll", back.transform = TRUE)
+model_pred10 <- ggpredict(full_log3, terms = "wt_seeds_mg", back.transform = TRUE)
+
+plot(ggpredict(full_log3, terms = "tag_num", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "shrub_number", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "plant_num", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "nr_infl_coll", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "wt_seeds_mg", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "total_nr_infl", back.transform = TRUE), add.data = TRUE)
+
+model_pred5
+model_pred6
+model_pred7
+model_pred8
+model_pred9
+model_pred10
+```
+
+
+```{r checking assumptions}
+# Diagnostics
+
+#We visually assess normality and homoskedasticity of residuals using diagnostic plots for the full model
+par(mfrow= c(2,2))
+plot(full_log3)
+
+#testing normality and heteroscedasticity
+check_normality(full_log3)
+check_heteroscedasticity(full_log3)
+
+#results of LR
+summary(full_log3)
+```
+```{r}
+# Create a formula including all variables except "seeds"
+formula <- as.formula(paste("seeds ~", paste(names(fulldata2)[-which(names(fulldata2) == "seeds")], collapse = "+")))
+
+# Fit the ANOVA model using the formula
+anova_result <- aov(formula, data = fulldata2)
+summary(anova_result)
+
+```
+
+
+
+
+```{r visualizing the data}
+plot_seeds <- function(var_name) {
+  ggplot(data2, aes(x = !!sym(var_name), y = seeds)) +
+    geom_point() +
+    labs(x = var_name, y = "Seeds")+
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+}
+
+#variable names excluding "seeds"
+variable_names <- names(data2)[-1]
+
+#creating plots for each variable
+plots <- lapply(variable_names, plot_seeds)
+
+#arranging the plots
+plot_grid(plotlist = plots, ncol = 2)
+```
+
+
+```{r creating linear regression for the data }
+#adding 0.01 to data becuase value of 0 doesn't work with log transformation
+fixed<- 0.01 
+data2$seeds_fixed <- data2$seeds + fixed
+null_log<- lm(log(seeds_fixed)~1, data= data2)
+full_log <- lm(log(seeds_fixed) ~treatment  + species + total_nr_infl, data = data2)
+```
+
+```{r checking assumptions}
+# Diagnostics
+
+#We visually assess normality and homoskedasticity of residuals using diagnostic plots for the full model
+par(mfrow= c(2,2))
+plot(full_log)
+
+#testing normality and heteroscedasticity
+check_normality(full_log)
+check_heteroscedasticity(full_log)
+
+#results of LR
+summary(full_log)
+```
+
+```{r}
+#using ggpredict to backtransform estimates 
+model_pred1 <- ggpredict(full_log, terms = "treatment", back.transform = TRUE)
+model_pred2 <- ggpredict(full_log, terms = "species", back.transform = TRUE)
+model_pred3 <- ggpredict(full_log, terms = "total_nr_infl", back.transform = TRUE)
+
+plot(ggpredict(full_log, terms = "treatment", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log, terms = "species", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log, terms = "total_nr_infl", back.transform = TRUE), add.data = TRUE)
+
+model_pred1
+model_pred2
+model_pred3
+```
+
+```{r}
+#second model
+model2_log<- lm(log(seeds_fixed) ~ total_nr_infl, data= data2)
+#check the plot
+par(mfrow= c(2,2))
+plot(model2_log)
+
+check_normality(model2_log)
+check_heteroscedasticity(model2_log)
+#creating a model of predicted values of seeds vs. actual 
+total_nr_infl_seq <- seq(min(data2$total_nr_infl), max(data2$total_nr_infl), length.out = 100)
+seeds_pred <- predict(model2_log, newdata = data.frame(total_nr_infl = total_nr_infl_seq))
+plot(data2$total_nr_infl, data2$seeds, pch = 16, col = "blue", xlab = "Total Number of Infl", ylab = "Seeds")
+lines(total_nr_infl_seq, seeds_pred, col = "red", lwd = 2)
+
+```
+```{r}
+#third model
+model3_log<- lm(log(seeds_fixed) ~ species, data= data2)
+#check the plot
+plot(model3_log)
+
+check_normality(model3_log)
+check_heteroscedasticity(model3_log)
+#visualizing predictions
+species_seq <- unique(data2$species)
+seeds_pred <- predict(model3_log, newdata = data.frame(species = species_seq))
+plot(factor(data2$species), data2$seeds, pch = 16, col = "blue", xlab = "Species", ylab = "Seeds")
+points(factor(species_seq), seeds_pred, col = "red", pch = 16)
+
+```
+```{r}
+#fourth model
+model4_log<- lm(log(seeds_fixed) ~ treatment, data= data2)
+#check the plot
+plot(model4_log)
+
+check_normality(model4_log)
+check_heteroscedasticity(model4_log)
+```
+
+
+```{r}
+#AIC is useful for comparing 2 or more models. The AIC value comparison can tell us what model is the least complex and best predicts our response. Lowest AIC value means best model
+AICc(full_log)
+AICc(model2_log)
+AICc(null_log)
+```
+```{r}
+MuMIn:: model.sel(full_log, model2_log, null_log, model3_log, model4_log)
+```
 

@@ -46,7 +46,8 @@ summarise(filtered_data1, Mean_Seed_Number = mean(seeds),
 ```{r}
 #making a data set of mean seed values for the visualization
 mean_data1 <- aggregate(seeds ~ mound, data = filtered_data1, FUN = mean)
-
+mean_data1 <- mean_data1[complete.cases(mean_data1$seeds), ]
+view(mean_data1)
 ```
 
 

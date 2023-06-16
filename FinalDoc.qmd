@@ -1,0 +1,305 @@
+---
+title: "Final Assignment Doc"
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-fold: true
+    theme: yeti
+execute: 
+  message: false
+  warning: false
+editor_options: 
+  chunk_output_type: inline
+---
+
+# ES 193DS Final
+
+Nick Momaney
+
+6/16/2023
+
+## Problem 1
+
+### Introduction
+
+Kangaroo rats (*Dipodomys spectabilis)* create small mounds of dirt in their habitats, which are considered a disturbance in plant ecology, by creating seed banks (Koontz and Simpson, 2013). The rats create these mounds to serve as a burrow that they inhabit (Pesaturo, 2020). The data was collected on the seed counts for these rat mounds, in the Chihuahuan Desert, to see if the mounds affected the size and composition of seed banks. The mounds were found to have extra seeds which can be attributed to the rats placing them in the burrows, and the creation of the burrows (National Park Service 2018). This data analysis answers the question of how the amount of seeds differs between mound locations.
+
+### Methods
+
+For this data analysis the following R packages were utilized:
+
+```{r}
+library(tidyverse)
+library(here)
+library(janitor)
+library(ggeffects)
+library(performance)
+library(naniar) # or equivalent
+library(flextable) # or equivalent
+library(car)
+library(broom)
+library(corrplot)
+library(AICcmodavg)
+library(GGally)
+library(ggplot2)
+```
+
+To begin the data analyzation, Koontz and Simpson's data on seed counts was loaded into R and the column names were cleaned up to make the data more digestible. Additionally, the different seed counts for each mound location were averaged to visualize the differences in the count at each location (excluding outliers).
+
+```{r loading in the data}
+#calling in data
+data1<-read.csv(here("data", "sev208_kratseedbank_20120213.txt.")) %>%
+  clean_names()
+#making column names nicer
+names(data1)<- c("mound", "direction", "habitat", "species", "seeds")
+head(data1)
+```
+
+```{r visualizing the seed counts at each location}
+#creating a data frame with the data filtered by the mound location
+filtered_data1<-data1 %>%
+  group_by(mound)
+#looking at the seed data for each mound location
+summarise(filtered_data1, Mean_Seed_Number = mean(seeds),
+    Median_Seed_Number = median(seeds),
+    SD_Seed_Number = sd(seeds))
+#making a data set of mean seed values for the visualization
+mean_data1 <- aggregate(seeds ~ mound, data = filtered_data1, FUN = mean)
+#recognizing mound values 
+mean_data1$mound <- factor(mean_data1$mound)
+#making a bar plot of the mean seed counts to visualize differences at each location
+ggplot(mean_data1, aes(x = mound, y = seeds)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Location", y = "Mean Seed Count") +
+  scale_y_continuous(breaks = seq(0, max(mean_data1$seeds), by = 1), limits=c(0, 12))+
+    theme(plot.margin = margin(0, 10, 0, 10, "pt")
+  )
+```
+
+This visualization does show some variance between locations, however the difference in values does not seem extremely significant. To determine if there is a statistically significant difference in the seed counts, a statistical analysis was performed. The null hypothesis to be tested states that there is a significant difference between the seed counts at the different mound locations. An ANOVA table was chosen to determine if the variation between the locations was significantly affected by the mound location. Before performing this test, the assumptions of normality and homoscedasticity were visually and mathematically checked to ensure the statistical analysis was appropriate.
+
+```{r checking assumptions of ANOVA}
+#making a linear regression of seed counts at mounds
+seed_only_data1<-filtered_data1%>%
+  select(mound, seeds)
+lrdata1<-lm(mound ~ seeds, data=seed_only_data1)
+#plotting assumption checks
+par(mfrow= c(2,2))
+plot(lrdata1)
+#checking assumptions statistically
+check_normality(lrdata1)
+check_heteroscedasticity(lrdata1)
+```
+
+First, a linear regression of the data was performed, on the mound location as a predictor of seed count. The visuals show homoscedasticity and normality are met. The mathematical test of normality of residuals did state that normality was not met, however, the visual check shows a clear pattern of normality. Given these results, the ANOVA table is an appropriate analysis for this data. Finally, the ANOVA table for the data was created.
+
+```{r creating the ANOVA table}
+seed_only_data1$mound <- as.factor(seed_only_data1$mound)
+anova_result1 <- aov(seeds ~ mound, data = seed_only_data1)
+summary(anova_result1)
+```
+
+### Results
+
+The "Residuals" row in the ANOVA table shows a significant amount of residuals that are not explained by the difference in mound locations. The p-value is significantly greater than 0.05 which disproves the null hypothesis. Therefore, it is determined that there is insufficient evidence that there is a significant difference in seed counts between the different levels of the "mound" variable. Although the mean seed counts vary at each location, the individual collection of seed counts at each location were proven to not have statistically different values by determination of mound location. The ANOVA tables most important statistics for analyzing this data is the number of residuals and the p-value. The high number of residuals unexplained by the "mound" variable shows that a lot of the variance is not controlled by the mound location.
+
+## Problem 2
+
+### Introduction
+
+Due to climate-change, the environment of the alpine tundra has warmed and led to "shrubification" (Mekonnen et al., 2021). The shrubification is suspected to be affecting the flowering of plants in its proximity (Seaver, 2019). The increase in the amount of shrubs increases carbon uptake in Tundra environments, however, this shift affects plant ecology within these ecosystems (Riley, 2021). The study conducted by Seaver, collected data on all aspects of the plants and how they relate to their environment amongst the shrubs, with the data set in this analysis focusing on how the new environment may affect the seed output of flowering plants. This data analysis answers the question of how the seed count varies with plot type (shrubs or open ground), plant species, and the total number of inflorescences, or, if there is a better predictor of seed count.
+
+### Methods
+
+For this data analysis the following R packages were utilized:
+
+```{r}
+library(tidyverse)
+library(here)
+library(janitor)
+library(ggeffects)
+library(performance)
+library(naniar) # or equivalent
+library(flextable) # or equivalent
+library(car)
+library(broom)
+library(corrplot)
+library(AICcmodavg)
+library(GGally)
+library(ggplot2)
+library(cowplot)
+```
+
+To begin the data analyzation, Seaver's data on seed counts was loaded into R and the column names were cleaned up to make the data more digestible. Next, the data was filtered to only include the columns seeds, plot type, species, and total number of inflorescences.
+
+```{r loading in and filtering the data}
+#calling in data
+rawdata2<-read.csv(here("data", "shrubstudy_seed_ctwt.ms.data.csv")) 
+#making column names nicer
+names(rawdata2)<- c("date", "shrub_number", "aspect", "tag_num", "treatment","species","plant_num","distance_from_shrub","total_nr_infl", "nr_infl_coll", "seeds", "wt_seeds_mg", "notes")
+#filtering data set to only include relevant data
+data2 <- rawdata2 %>%
+  select(seeds, treatment, species, total_nr_infl)
+#removing the NA values from the seeds collumn
+data2 <- data2[complete.cases(data2$seeds), ]
+
+head(data2)
+```
+
+First, a visualization of this data was created to show how the seed count varied with each variable.
+
+```{r creating a visualization}
+plot_seeds <- function(var_name) {
+  ggplot(data2, aes(x = !!sym(var_name), y = seeds)) +
+    geom_point() +
+    labs(x = var_name, y = "Seeds")+
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+}
+
+#variable names excluding "seeds"
+variable_names <- names(data2)[-1]
+
+#creating plots for each variable
+plots <- lapply(variable_names, plot_seeds)
+
+#arranging the plots
+plot_grid(plotlist = plots, ncol = 2)
+```
+
+After creating this visualization, a log transformation was performed on the data to compensate for its skewed nature, and a linear regression was performed on the data to show how well the variables served as predictors of the seed count. The assumptions of this linear regression were also checked to determine if the modeling was appropriate for the data.
+
+```{r linear regression and checking assumptions}
+#adding 0.01 to data becuase value of 0 doesn't work with log transformation
+fixed<- 0.01 
+data2$seeds_fixed <- data2$seeds + fixed
+null_log<- lm(log(seeds_fixed)~1, data= data2)
+full_log <- lm(log(seeds_fixed) ~treatment  + species + total_nr_infl, data = data2)
+# Diagnostics
+
+#We visually assess normality and homoskedasticity of residuals using diagnostic plots for the full model
+par(mfrow= c(2,2))
+plot(full_log)
+
+#testing normality and heteroscedasticity
+check_normality(full_log)
+check_heteroscedasticity(full_log)
+
+#results of LR
+summary(full_log)
+```
+
+This linear regression does not appear to model the data well, as determined by the plots above, which show non-normality and heteroscedasticity. To confirm this conclusion, models of the seed count as a prediction of these variables was also created.
+
+```{r}
+#using ggpredict to backtransform estimates 
+model_pred1 <- ggpredict(full_log, terms = "treatment", back.transform = TRUE)
+model_pred2 <- ggpredict(full_log, terms = "species", back.transform = TRUE)
+model_pred3 <- ggpredict(full_log, terms = "total_nr_infl", back.transform = TRUE)
+
+plot(ggpredict(full_log, terms = "treatment", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log, terms = "species", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log, terms = "total_nr_infl", back.transform = TRUE), add.data = TRUE)
+
+model_pred1
+model_pred2
+model_pred3
+
+```
+
+These graphs show that the chosen variables are bad predictors of the seed count, except for the total number of inflorescences, which the predicted values (black line) in the graph model the actual points closely. Given, that the total number of inflorescences predicts the seed count far better than the other non-numerical variables analyzed, the other numerical variables were checked with the total number of inflorescences to determine if this was truly the best predictor in the dataset. These other variables were. the tag number, shrub number, plant number, number of inflorescenses, and the weight of the seeds collected. The code and visualizations are shown below.
+
+```{r assessing all numerical variables}
+#making a dataset with all variables cleaned up
+rawdata2 <-rawdata2[complete.cases(rawdata2), ]
+view(rawdata2)
+# Select numerical columns
+fulldata2 <- select_if(rawdata2, is.numeric)
+view(fulldata2)
+#correlation plot
+#To determine the relationships between numerical variables in our dataset, we calculated Pearsons r and visually represented correlation using a correlation plot.
+#Pearson's r calculated for numerical values only
+
+seed_cor2<-fulldata2 %>% 
+  select(shrub_number:wt_seeds_mg) %>% 
+  cor(method="pearson")
+#creating a correlation plot
+corrplot(seed_cor2,
+         #change the shape of what's in the cells
+         method = "ellipse",
+         addCoef.col = "black"
+         )
+null_log3<- lm(log(seeds)~1, data= fulldata2)
+full_log3 <- lm(log(seeds) ~ total_nr_infl+ tag_num+ shrub_number+plant_num+nr_infl_coll+wt_seeds_mg, data = fulldata2)
+model_pred5 <- ggpredict(full_log3, terms = "tag_num", back.transform = TRUE)
+model_pred6 <- ggpredict(full_log3, terms = "shrub_number", back.transform = TRUE)
+model_pred7 <- ggpredict(full_log3, terms = "plant_num", back.transform = TRUE)
+model_pred8 <- ggpredict(full_log3, terms = "total_nr_infl", back.transform = TRUE)
+model_pred9 <- ggpredict(full_log3, terms = "nr_infl_coll", back.transform = TRUE)
+model_pred10 <- ggpredict(full_log3, terms = "wt_seeds_mg", back.transform = TRUE)
+
+plot(ggpredict(full_log3, terms = "tag_num", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "shrub_number", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "plant_num", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "nr_infl_coll", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "wt_seeds_mg", back.transform = TRUE), add.data = TRUE)
+
+plot(ggpredict(full_log3, terms = "total_nr_infl", back.transform = TRUE), add.data = TRUE)
+
+model_pred5
+model_pred6
+model_pred7
+model_pred8
+model_pred9
+model_pred10
+# Diagnostics
+
+#We visually assess normality and homoskedasticity of residuals using diagnostic plots for the full model
+par(mfrow= c(2,2))
+plot(full_log3)
+
+#testing normality and heteroscedasticity
+check_normality(full_log3)
+check_heteroscedasticity(full_log3)
+
+#results of LR
+summary(full_log3)
+```
+
+These analyses and visualizations showed that these variables were much better predictors of the seed count, and the assumptions of normality and homoscedasticity were proved visually. Given this, an ANOVA table was created to statistically prove which variable was the best predictor. The null hypothesis, each given variable, in this analysis is that the variable is has a statistically significant effect on the seed count.
+
+```{r creating anova}
+#create a formula including all variables except "seeds"
+formula <- as.formula(paste("seeds ~", paste(names(fulldata2)[-which(names(fulldata2) == "seeds")], collapse = "+")))
+
+#fit the ANOVA model using the formula
+anova_result <- aov(formula, data = fulldata2)
+summary(anova_result)
+```
+
+### Results
+
+The seed count was shown to not vary uniformly as a function of the plot type or plant species, so other variables were assessed to determine what the best and most simple model would be. When analyzing all of the data variables with numeric data that was collected with the seed counts, the prediction plots showed much stronger correlations and proved these variables to be better predictors. The ANOVA table data shows a fairly low number of residuals unexplained by these variables, and the p-value for the weight of the seeds and total number of inflorescenses was less than 0.05, meaning that these variables were statistically significant predictors of the seed count. Taking all of the results and figures into consideration, the total number of inflorescenses has the greatest effect on the seed count, and it is the best predictor. Along with the visualizations of this variable in relation to seed count, the p-value of this variable was the lowest among those assessed, confirming the conclusion.
+
+## Works Cited
+
+-   Kameyama, Yoshiaki, and Gaku Kudo. \"Flowering Phenology Influences Seed Production and Outcrossing Rate in Populations of an Alpine Snowbed Shrub, Phyllodoce Aleutica: Effects of Pollinators and Self-Incompatibility.\" *Annals of Botany*, vol. 103, no. 9, 2009, pp. 1385--1394, https://doi.org/10.1093/aob/mcp037.
+
+-   Koontz, T. and H. Simpson. 2013. Effects of Kangaroo Rat Mounds on Seed Banks of Grass and Shrublands at the Sevilleta National Wildlife Refuge, New Mexico (2001) ver 102459. Environmental Data Initiative. https://doi.org/10.6073/pasta/115b8095a5e82028869a8c56eff14597 (Accessed 2023-06-16).
+
+-   Mekonnen1, Zelalem A, et al. \"IOPscience.\" *Environmental Research Letters*, 23 Apr. 2021, iopscience.iop.org/article/10.1088/1748-9326/abf28b.
+
+-   Pesaturo, Janet. \"Kangaroo Rat.\" *National Parks Service*, www.nps.gov/orpi/learn/nature/kangaroo-rat.htm#:\~:text=Kangaroo%20rats%20will%20forage%20and,to%2030%20percent%20more%20moisture. Accessed 15 June 2023.
+
+-   Riley, William. \"Arctic Tundra Shrubification: A Review of Mechanisms and Impacts on Ecosystem Carbon Balance.\" *Environmental System Science Program*, 5 Oct. 2021, ess.science.energy.gov/highlight/arctic-tundra-shrubification-a-review-of-mechanisms-and-impacts-on-ecosystem-carbon-balance/.
+
+```{=html}
+<!-- -->
+```
+-   Seaver, M. 2022. Individual and community flowering phenology, seed counts and pollinator visitation rates in shrub and open plots across Niwot Ridge, 2019 - 2021. ver 1. Environmental Data Initiative. https://doi.org/10.6073/pasta/edc4ab2faf7dd96cd1deac1544d5f2b9 (Accessed 2023-06-16).
